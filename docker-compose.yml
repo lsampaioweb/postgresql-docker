@@ -1,0 +1,144 @@
+version: "3.9"
+
+# Define external networks
+networks:
+  reverse-proxy:
+    external: true
+
+services:
+  postgres:
+    # Use the latest PostgreSQL image
+    image: "postgres:latest"
+
+    # Name of the container
+    container_name: "postgres"
+
+    # Restart policy for the container
+    restart: "unless-stopped"
+
+    # Set shared memory limit when using docker-compose
+    shm_size: "128mb"
+
+    environment:
+      # PostgreSQL root password
+      - "POSTGRES_PASSWORD=${POSTGRES_ROOT_PASSWORD}"
+
+    volumes:
+      # Adjust the date and time of the container
+      - "/etc/timezone:/etc/timezone:ro"
+      - "/etc/localtime:/etc/localtime:ro"
+
+      # Files and folders for the container
+      - "./config/postgresql/postgresql.conf:/etc/postgresql/postgresql.conf"
+      # PostgreSQL configuration file
+      # - "./data/postgresql/:/var/lib/postgresql/data/"
+      # Directory for PostgreSQL logs
+      - "./logs/postgresql/:/var/log/postgresql/"
+
+    networks:
+      # Connect to the external reverse-proxy network
+      - "reverse-proxy"
+
+    labels:
+      # Enable Traefik for this service
+      - "traefik.enable=true"
+
+      # Traefik entrypoint for PostgreSQL
+      - "traefik.tcp.routers.postgres.entrypoints=postgres"
+
+      # Enable TLS for Traefik router
+      - "traefik.tcp.routers.postgres.tls=true"
+
+      # Routing rule based on SNI (Server Name Indication)
+      - "traefik.tcp.routers.postgres.rule=HostSNI(`edge-postgres.lan.homelab`)"
+
+      # Traefik service name for PostgreSQL
+      - "traefik.tcp.routers.postgres.service=postgres"
+
+      # Port for PostgreSQL service
+      - "traefik.tcp.services.postgres.loadBalancer.server.port=5432"
+
+    # Command to start PostgreSQL with the specified configuration file
+    command: "postgres -c config_file=/etc/postgresql/postgresql.conf"
+
+    healthcheck:
+      # Health check command for PostgreSQL
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+
+      # Initial start period before health checks
+      start_period: "5s"
+
+      # Interval between health checks
+      interval: "10s"
+
+      # Timeout for each health check
+      timeout: "2s"
+
+      # Number of retries before marking the container as unhealthy
+      retries: 2
+
+  pgadmin:
+    # Use the latest pgAdmin image
+    image: "dpage/pgadmin4:latest"
+
+    # Name of the container
+    container_name: "pgadmin"
+
+    # Restart policy for the container
+    restart: "unless-stopped"
+
+    depends_on:
+      # Ensure PostgreSQL starts before pgAdmin
+      - "postgres"
+
+    environment:
+      # Default email for pgAdmin login
+      - "PGADMIN_DEFAULT_EMAIL=root@lan.homelab"
+
+      # Default password for pgAdmin login
+      - "PGADMIN_DEFAULT_PASSWORD=${POSTGRES_ROOT_PASSWORD}"
+
+    networks:
+      # Connect to the external reverse-proxy network
+      - "reverse-proxy"
+
+    labels:
+      # Enable Traefik for this service
+      - "traefik.enable=true"
+
+      # Traefik entrypoint for pgAdmin
+      - "traefik.http.routers.pgadmin.entrypoints=websecure"
+
+      # Enable TLS for Traefik router
+      - "traefik.http.routers.pgadmin.tls=true"
+
+      # Routing rule based on host
+      - "traefik.http.routers.pgadmin.rule=Host(`edge-pgadmin.lan.homelab`)"
+
+    volumes:
+      # Adjust the date and time of the container
+      - "/etc/timezone:/etc/timezone:ro"
+      - "/etc/localtime:/etc/localtime:ro"
+
+      # Files and folders for the container
+      - "./config/pgadmin/servers.json:/pgadmin4/servers.json"
+      # pgAdmin servers configuration file
+      # - "./data/pgadmin/:/var/lib/pgadmin/"
+      # Directory for pgAdmin logs
+      - "./logs/pgadmin/:/var/log/pgadmin/"
+
+    healthcheck:
+      # Health check command for pgAdmin
+      test: ["CMD", "wget", "-O", "-", "http://localhost/misc/ping"]
+
+      # Initial start period before health checks
+      start_period: "5s"
+
+      # Interval between health checks
+      interval: "10s"
+
+      # Timeout for each health check
+      timeout: "2s"
+
+      # Number of retries before marking the container as unhealthy
+      retries: 2
