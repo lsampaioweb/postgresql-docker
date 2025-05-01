@@ -1,4 +1,4 @@
 data/*
 *.crt
 *.key
-*.log
+*.log.DS_Store
